@@ -27,3 +27,5 @@ Thumbs.db
 # Temp files
 exe_stderr.txt
 exe_stdout.txt
+standalone_status.txt
+exe_icon_preview.png

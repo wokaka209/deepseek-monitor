@@ -68,11 +68,13 @@ The CSV parser handles multiple column name variants (`date`/`day`/`time`/`creat
 ## Building the exe
 
 ```powershell
-conda run -n py11-tools python -m pytest tests -q
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt pyinstaller pytest
+.\.venv\Scripts\python.exe -m pytest tests -q
 powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-Output lands in `dist/DeepSeekMonitor.exe`. Uses the `py11-tools` Conda environment and PyInstaller with `--onefile --windowed`.
+Output lands in `dist/DeepSeekMonitor.exe`. The build uses the local `.venv` so the packaged app does not depend on Conda being on `PATH`.
 
 ## Built with
 
