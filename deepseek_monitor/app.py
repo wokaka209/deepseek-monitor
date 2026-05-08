@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QLineF, QRectF
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -165,6 +165,7 @@ class SettingsDialog(QDialog):
     def __init__(self, config: AppConfig, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("设置")
+        self.setWindowIcon(QIcon(str(resource_path("deepseek_monitor/assets/app.ico"))))
         self.setMinimumWidth(460)
         self.api_key_input = QLineEdit(config.api_key)
         self.api_key_input.setEchoMode(QLineEdit.Password)
@@ -173,6 +174,8 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
         layout.setSpacing(12)
+        title = QLabel("连接 DeepSeek")
+        title.setObjectName("dialogTitle")
         label = QLabel("DeepSeek API Key")
         label.setObjectName("smallText")
         hint = QLabel("API Key 将保存到 Windows 用户目录的本应用配置文件中。")
@@ -186,10 +189,48 @@ class SettingsDialog(QDialog):
         buttons.addWidget(cancel_btn)
         buttons.addWidget(save_btn)
 
+        layout.addWidget(title)
         layout.addWidget(label)
         layout.addWidget(self.api_key_input)
         layout.addWidget(hint)
         layout.addLayout(buttons)
+        self.setStyleSheet(
+            """
+            QDialog {
+                background: #151c1a;
+                color: #f4f1e8;
+                font-family: "Microsoft YaHei";
+            }
+            QLabel#dialogTitle {
+                color: #f4f1e8;
+                font-size: 22px;
+                font-weight: 800;
+            }
+            QLabel#smallText {
+                color: #aeb8b3;
+                font-size: 12px;
+            }
+            QLineEdit {
+                background: #0b100e;
+                color: #f4f1e8;
+                border: 1px solid #3a4642;
+                border-radius: 8px;
+                padding: 10px;
+                selection-background-color: #796cff;
+            }
+            QPushButton {
+                background: rgba(255, 255, 255, 26);
+                color: #f4f1e8;
+                border: 1px solid rgba(255, 255, 255, 35);
+                border-radius: 8px;
+                padding: 8px 14px;
+                font-weight: 700;
+            }
+            QPushButton:hover {
+                background: rgba(121, 108, 255, 95);
+            }
+            """
+        )
 
     @property
     def api_key(self) -> str:
@@ -204,6 +245,7 @@ class MainWindow(QMainWindow):
         self.summary = self._load_summary()
 
         self.setWindowTitle("DeepSeek Monitor")
+        self.setWindowIcon(QIcon(str(resource_path("deepseek_monitor/assets/app.ico"))))
         self.resize(1120, 700)
         self.setMinimumSize(960, 620)
 
@@ -489,8 +531,14 @@ def read_text_file(path: Path) -> str:
     return path.read_text()
 
 
+def resource_path(relative_path: str) -> Path:
+    base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return base_path / relative_path
+
+
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(resource_path("deepseek_monitor/assets/app.ico"))))
     window = MainWindow()
     window.show()
     return app.exec()

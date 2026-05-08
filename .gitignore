@@ -23,3 +23,7 @@ Thumbs.db
 
 # pytest
 .pytest_cache/
+
+# Temp files
+exe_stderr.txt
+exe_stdout.txt
