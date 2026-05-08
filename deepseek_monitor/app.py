@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from .deepseek_api import Balance, fetch_balance
+from .deepseek_api import BALANCE_URL
+from .platform_usage import fetch_platform_balance, fetch_platform_usage
 from .storage import AppConfig, load_config, load_usage_csv, save_config, save_usage_csv
 from .usage import UsageMetric, UsageSummary, aggregate_usage, parse_usage_csv, sample_usage
 
@@ -170,6 +172,9 @@ class SettingsDialog(QDialog):
         self.api_key_input = QLineEdit(config.api_key)
         self.api_key_input.setEchoMode(QLineEdit.Password)
         self.api_key_input.setPlaceholderText("sk-...")
+        self.platform_token_input = QLineEdit(config.platform_token)
+        self.platform_token_input.setEchoMode(QLineEdit.Password)
+        self.platform_token_input.setPlaceholderText("platform userToken")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -178,8 +183,16 @@ class SettingsDialog(QDialog):
         title.setObjectName("dialogTitle")
         label = QLabel("DeepSeek API Key")
         label.setObjectName("smallText")
+        platform_label = QLabel("DeepSeek Platform userToken")
+        platform_label.setObjectName("smallText")
+        endpoint = QLabel(f"余额查询：{BALANCE_URL}")
+        endpoint.setObjectName("smallText")
+        platform_hint = QLabel("登录 platform.deepseek.com 后，从浏览器本地登录态复制 userToken；用于刷新平台用量。")
+        platform_hint.setObjectName("smallText")
+        platform_hint.setWordWrap(True)
         hint = QLabel("API Key 将保存到 Windows 用户目录的本应用配置文件中。")
         hint.setObjectName("smallText")
+        hint.setWordWrap(True)
         buttons = QHBoxLayout()
         save_btn = QPushButton("保存")
         cancel_btn = QPushButton("取消")
@@ -192,6 +205,10 @@ class SettingsDialog(QDialog):
         layout.addWidget(title)
         layout.addWidget(label)
         layout.addWidget(self.api_key_input)
+        layout.addWidget(endpoint)
+        layout.addWidget(platform_label)
+        layout.addWidget(self.platform_token_input)
+        layout.addWidget(platform_hint)
         layout.addWidget(hint)
         layout.addLayout(buttons)
         self.setStyleSheet(
@@ -236,6 +253,10 @@ class SettingsDialog(QDialog):
     def api_key(self) -> str:
         return self.api_key_input.text().strip()
 
+    @property
+    def platform_token(self) -> str:
+        return self.platform_token_input.text().strip()
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -266,7 +287,7 @@ class MainWindow(QMainWindow):
         content.addWidget(self.right_panel, 1)
         main.addLayout(content, 1)
 
-        self.status_label = QLabel("就绪：无 API Key 时显示示例余额；导入 CSV 后显示真实用量。")
+        self.status_label = QLabel("就绪：无 API Key 时显示示例余额；导入 CSV 或刷新平台用量后显示真实用量。")
         self.status_label.setObjectName("smallText")
         main.addWidget(self.status_label)
 
@@ -278,15 +299,18 @@ class MainWindow(QMainWindow):
         title = QLabel("DeepSeek Monitor")
         title.setObjectName("title")
         refresh_btn = QPushButton("刷新余额")
+        usage_btn = QPushButton("刷新用量")
         import_btn = QPushButton("导入 Usage CSV")
         settings_btn = QPushButton("设置")
         refresh_btn.clicked.connect(self.refresh_balance)
+        usage_btn.clicked.connect(self.refresh_platform_usage)
         import_btn.clicked.connect(self.import_csv)
         settings_btn.clicked.connect(self.open_settings)
 
         header.addWidget(title)
         header.addStretch()
         header.addWidget(refresh_btn)
+        header.addWidget(usage_btn)
         header.addWidget(import_btn)
         header.addWidget(settings_btn)
         return header
@@ -397,16 +421,45 @@ class MainWindow(QMainWindow):
         self.chart_total_label.setText(compact_number(self.summary.total_tokens))
 
     def refresh_balance(self) -> None:
-        if not self.config.api_key:
-            self.status_label.setText("未设置 API Key，继续显示示例余额。")
+        if not self.config.api_key and not self.config.platform_token:
+            self.status_label.setText("未设置 API Key 或 Platform userToken，继续显示示例余额。")
             return
         try:
-            self.balance = fetch_balance(self.config.api_key)
+            if self.config.api_key:
+                self.balance = fetch_balance(self.config.api_key)
+                source = "API Key"
+            else:
+                self.balance = fetch_platform_balance(self.config.platform_token)
+                source = "Platform userToken"
         except Exception as exc:
+            if self.config.api_key and self.config.platform_token:
+                try:
+                    self.balance = fetch_platform_balance(self.config.platform_token)
+                except Exception:
+                    pass
+                else:
+                    self.status_label.setText("余额已通过 Platform userToken 刷新。")
+                    self.refresh_view()
+                    return
             QMessageBox.warning(self, "刷新失败", f"无法获取 DeepSeek 余额：\n{exc}")
-            self.status_label.setText("余额刷新失败，请检查 API Key 或网络。")
+            self.status_label.setText("余额刷新失败，请检查 API Key、Platform userToken 或网络。")
             return
-        self.status_label.setText("余额已刷新。")
+        self.status_label.setText(f"余额已通过 {source} 刷新。")
+        self.refresh_view()
+
+    def refresh_platform_usage(self) -> None:
+        if not self.config.platform_token:
+            self.status_label.setText("未设置 Platform userToken，无法刷新平台用量。")
+            return
+        now = datetime.now(timezone.utc)
+        try:
+            self.balance = fetch_platform_balance(self.config.platform_token)
+            self.summary = fetch_platform_usage(self.config.platform_token, now.year, now.month)
+        except Exception as exc:
+            QMessageBox.warning(self, "刷新失败", f"无法获取 DeepSeek 平台用量：\n{exc}")
+            self.status_label.setText("平台用量刷新失败，请检查 userToken 或网络。")
+            return
+        self.status_label.setText(f"平台余额和用量已刷新：UTC {now.year}-{now.month:02d}")
         self.refresh_view()
 
     def import_csv(self) -> None:
@@ -429,6 +482,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
         self.config.api_key = dialog.api_key
+        self.config.platform_token = dialog.platform_token
         save_config(self.config)
         self.status_label.setText("设置已保存。")
 

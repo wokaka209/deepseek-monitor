@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 import requests
 
@@ -35,8 +35,12 @@ def parse_balance_response(payload: Dict[str, Any]) -> Balance:
     )
 
 
-def fetch_balance(api_key: str, timeout: float = 10.0) -> Balance:
-    response = requests.get(
+def fetch_balance(
+    api_key: str,
+    timeout: float = 10.0,
+    http_get: Callable[..., Any] = requests.get,
+) -> Balance:
+    response = http_get(
         BALANCE_URL,
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=timeout,
