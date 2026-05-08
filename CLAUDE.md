@@ -18,8 +18,11 @@ pytest
 # 运行单个测试
 pytest tests/test_usage.py::test_parse_usage_csv_accepts_common_deepseek_export_columns
 
-# 打包为 exe (Windows)
-powershell -File build_exe.ps1
+# 打包为 exe (Windows) — 需要先创建 .venv
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt pyinstaller pytest
+.\.venv\Scripts\python.exe -m pytest tests -q
+powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
 ## 架构
@@ -31,6 +34,9 @@ deepseek_monitor/
   deepseek_api.py           # DeepSeek API 余额查询 (fetch_balance, parse_balance_response)
   storage.py                # 配置存储 (%APPDATA%/DeepSeekMonitor/)，CSV 读写
   usage.py                  # 用量数据模型：UsageRow、UsageMetric、UsageSummary，CSV 解析
+  assets/
+    app.ico                 # 应用图标（exe 和窗口标题栏）
+    app.png                 # 应用图标 PNG 版本
 tests/
   test_balance.py           # 余额 API 响应解析测试
   test_usage.py             # CSV 解析和聚合逻辑测试
