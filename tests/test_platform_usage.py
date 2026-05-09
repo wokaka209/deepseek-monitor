@@ -115,6 +115,30 @@ def test_fetch_platform_usage_uses_platform_token_and_month_query():
     ]
 
 
+def test_fetch_platform_usage_normalizes_copied_platform_token():
+    calls = []
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    def fake_get(url, headers, params, timeout):
+        calls.append(headers["Authorization"])
+        if url == PLATFORM_USAGE_AMOUNT_URL:
+            return Response({"data": {"biz_data": {"total": [], "days": []}}})
+        return Response({"data": {"biz_data": []}})
+
+    fetch_platform_usage(' Bearer "platform-token" ', 2026, 5, http_get=fake_get)
+
+    assert calls == ["Bearer platform-token", "Bearer platform-token"]
+
+
 def test_parse_platform_balance_sums_cny_wallets():
     payload = {
         "normal_wallets": [

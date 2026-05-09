@@ -40,7 +40,7 @@ from .desktop_integration import (
 )
 from .platform_usage import PlatformRateLimitError, fetch_platform_balance, fetch_platform_usage
 from .storage import AppConfig, load_config, load_usage_csv, save_config, save_usage_csv
-from .usage import UsageMetric, UsageSummary, aggregate_usage, parse_usage_csv, sample_usage
+from .usage import UsageMetric, UsageSummary, aggregate_usage, parse_usage_csv
 
 API_DOCS_URL = "https://api-docs.deepseek.com/zh-cn/api/get-user-balance"
 PLATFORM_USAGE_URL = "https://platform.deepseek.com/usage"
@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.config = load_config()
-        self.balance = Balance(False, "CNY", 25.75)
+        self.balance = Balance(False, "CNY", 0.0)
         self.summary = self._load_summary()
         self.tray = self._create_tray()
         self.auto_refresh_timer = QTimer(self)
@@ -392,7 +392,7 @@ class MainWindow(QMainWindow):
         content.addWidget(self.right_panel, 1)
         main.addLayout(content, 1)
 
-        self.status_label = QLabel("就绪：无 API Key 时显示示例余额；导入 CSV 或刷新平台用量后显示真实用量。")
+        self.status_label = QLabel("就绪：未配置凭据时显示 0；导入 CSV 或刷新平台用量后显示真实用量。")
         self.status_label.setObjectName("smallText")
         main.addWidget(self.status_label)
 
@@ -454,8 +454,8 @@ class MainWindow(QMainWindow):
 
         top = QGridLayout()
         top.setSpacing(14)
-        self.balance_card = MetricCard("账户余额", "¥25.75", "#796cff", "账户可用")
-        self.cost_card = MetricCard("本月消费", "¥0.00", "#ffb33c", "CSV / 示例数据")
+        self.balance_card = MetricCard("账户余额", "¥0.00", "#796cff", "未连接 API")
+        self.cost_card = MetricCard("本月消费", "¥0.00", "#ffb33c", "本月消费")
         top.addWidget(self.balance_card, 0, 0)
         top.addWidget(self.cost_card, 0, 1)
         layout.addLayout(top)
@@ -517,16 +517,10 @@ class MainWindow(QMainWindow):
         return panel
 
     def _load_summary(self) -> UsageSummary:
-        csv_text = load_usage_csv()
-        if not csv_text.strip():
-            return sample_usage()
-        try:
-            return aggregate_usage(parse_usage_csv(csv_text))
-        except Exception:
-            return sample_usage()
+        return usage_summary_from_saved_csv(load_usage_csv())
 
     def refresh_view(self) -> None:
-        balance_text = f"¥{self.balance.total:.2f}" if self.balance.is_available else "示例 ¥25.75"
+        balance_text = f"¥{self.balance.total:.2f}"
         balance_subtitle = "账户可用" if self.balance.is_available else "未连接 API"
         self.balance_card.set_values(balance_text, balance_subtitle)
         self.cost_card.set_values(f"¥{self.summary.total_cost:.2f}", "本月消费")
@@ -552,7 +546,9 @@ class MainWindow(QMainWindow):
 
     def refresh_balance(self) -> None:
         if not self.config.api_key and not self.config.platform_token:
-            self.status_label.setText("未设置 API Key 或 Platform userToken，继续显示示例余额。")
+            self.balance = Balance(False, "CNY", 0.0)
+            self.status_label.setText("未设置 API Key 或 Platform userToken，余额显示 0。")
+            self.refresh_view()
             return
         try:
             if self.config.api_key:
@@ -581,7 +577,9 @@ class MainWindow(QMainWindow):
         if self._skip_platform_refresh_if_cooling_down(show_dialog=True):
             return
         if not self.config.platform_token:
-            self.status_label.setText("未设置 Platform userToken，无法刷新平台用量。")
+            self.summary = UsageSummary()
+            self.status_label.setText("未设置 Platform userToken，用量显示 0。")
+            self.refresh_view()
             return
         now = datetime.now(timezone.utc)
         try:
@@ -603,7 +601,9 @@ class MainWindow(QMainWindow):
         if self._skip_platform_refresh_if_cooling_down(show_dialog=False):
             return
         if not self.config.platform_token:
-            self._notify("DeepSeek Monitor", "未设置 Platform userToken，无法自动刷新用量。")
+            self.summary = UsageSummary()
+            self.status_label.setText("未设置 Platform userToken，已跳过自动刷新。")
+            self.refresh_view()
             return
         now = datetime.now(timezone.utc)
         try:
@@ -770,6 +770,15 @@ def read_text_file(path: Path) -> str:
         except UnicodeDecodeError:
             pass
     return path.read_text()
+
+
+def usage_summary_from_saved_csv(csv_text: str) -> UsageSummary:
+    if not csv_text.strip():
+        return UsageSummary()
+    try:
+        return aggregate_usage(parse_usage_csv(csv_text))
+    except Exception:
+        return UsageSummary()
 
 
 def resource_path(relative_path: str) -> Path:

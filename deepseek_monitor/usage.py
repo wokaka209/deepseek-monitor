@@ -70,19 +70,6 @@ def aggregate_usage(rows: Iterable[UsageRow]) -> UsageSummary:
     return summary
 
 
-def sample_usage() -> UsageSummary:
-    rows = [
-        UsageRow(date(2026, 5, 1), "V4 Flash", 79600, 0.12, 22),
-        UsageRow(date(2026, 5, 2), "V4 Flash", 10840000, 0.71, 96),
-        UsageRow(date(2026, 5, 3), "V4 Pro", 13210000, 1.09, 118),
-        UsageRow(date(2026, 5, 4), "V4 Flash", 1100000, 0.25, 41),
-        UsageRow(date(2026, 5, 5), "V4 Pro", 1250000, 0.32, 47),
-        UsageRow(date(2026, 5, 6), "V4 Flash", 28750000, 1.33, 184),
-        UsageRow(date(2026, 5, 7), "V4 Flash", 12630000, 0.35, 91),
-    ]
-    return aggregate_usage(rows)
-
-
 def _pick(row: Dict[str, str], *names: str) -> str:
     normalized = {key.strip().lower(): value for key, value in row.items() if key}
     for name in names:

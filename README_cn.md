@@ -20,9 +20,9 @@
 
 ## 这是什么
 
-DeepSeek Monitor 调 DeepSeek 的接口查余额。你也可以导入从 DeepSeek 平台导出的用量 CSV —— 它会解析 token 数、费用、请求次数，然后按天、按模型画出来。
+DeepSeek Monitor 调 DeepSeek 的接口查余额。你也可以导入从 DeepSeek 平台导出的用量 CSV，或配置 Platform userToken 读取平台登录态下的用量数据。它会解析 token 数、费用、请求次数，然后按天、按模型画出来。
 
-没设 API Key？没关系，应用会显示示例数据，让你先看看界面长什么样。
+未配置凭据时，面板显示 0，不再显示示例数据。
 
 ## 跑起来
 
@@ -43,9 +43,9 @@ conda run -n py11-tools python main.py
 
 三种模式：
 
-1. **没 API Key** —— 显示示例余额（¥25.75）和假数据，纯预览。
+1. **未配置凭据** —— 所有用量数值显示 0。
 2. **填了 API Key** —— 点"刷新余额"调 DeepSeek 接口，真实数字替换占位符。
-3. **导入 CSV** —— 点"导入 Usage CSV"，选从 DeepSeek 下载的文件，面板自动刷新。
+3. **Platform userToken 或 CSV** —— 使用保存的 userToken 刷新平台用量，或点"导入 Usage CSV"选择从 DeepSeek 下载的文件。
 
 API Key 存在 `%APPDATA%/DeepSeekMonitor/config.json`，CSV 数据存在 `%APPDATA%/DeepSeekMonitor/usage.csv`。
 

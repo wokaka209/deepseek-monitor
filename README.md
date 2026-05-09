@@ -20,9 +20,9 @@ A Windows desktop app that keeps an eye on your DeepSeek API spending. Shows bal
 
 ## What is this
 
-DeepSeek Monitor talks to the DeepSeek API to fetch your account balance. You can also import the usage CSV exported from the DeepSeek platform — it parses tokens, costs, and request counts, then charts everything by day and model.
+DeepSeek Monitor talks to the DeepSeek API to fetch your account balance. You can also import the usage CSV exported from the DeepSeek platform, or configure a Platform userToken to refresh usage from the platform page login state. It parses tokens, costs, and request counts, then charts everything by day and model.
 
-No API key? No problem. The app falls back to sample data so you can see what the dashboard looks like before connecting.
+If credentials are not configured, the dashboard shows zero values instead of sample data.
 
 ## Getting started
 
@@ -43,9 +43,9 @@ The app window opens. Click **设置** to enter your API key, then **刷新余�
 
 Three modes:
 
-1. **No API key** — shows sample balance (¥25.75) and fake usage data. Good for previewing the UI.
+1. **No credentials** — shows zero values.
 2. **API key set** — click "刷新余额" to hit the DeepSeek balance endpoint. Real numbers replace the placeholders.
-3. **CSV import** — click "导入 Usage CSV", pick the file exported from DeepSeek. The app aggregates everything and redraws the charts.
+3. **Platform userToken or CSV import** — refresh platform usage with a saved userToken, or click "导入 Usage CSV" and pick the file exported from DeepSeek.
 
 Your API key gets saved to `%APPDATA%/DeepSeekMonitor/config.json`. CSV data goes to `%APPDATA%/DeepSeekMonitor/usage.csv`.
 

@@ -104,9 +104,16 @@ def parse_platform_usage(amount_data: Dict[str, Any], cost_data: Optional[Any] =
 
 def _platform_headers(platform_token: str) -> Dict[str, str]:
     return {
-        "Authorization": f"Bearer {platform_token.strip()}",
+        "Authorization": f"Bearer {_normalize_platform_token(platform_token)}",
         "X-App-Version": PLATFORM_APP_VERSION,
     }
+
+
+def _normalize_platform_token(platform_token: str) -> str:
+    token = platform_token.strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    return token.strip("\"'")
 
 
 def _raise_for_status(response: Any) -> None:
