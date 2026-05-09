@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt, QLineF, QRectF
-from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen
+from PySide6.QtCore import Qt, QLineF, QRectF, QTimer
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -18,16 +20,30 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QMenu,
     QPushButton,
+    QSpinBox,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
 
 from .deepseek_api import Balance, fetch_balance
 from .deepseek_api import BALANCE_URL
-from .platform_usage import fetch_platform_balance, fetch_platform_usage
+from .desktop_integration import (
+    config_dir,
+    format_refresh_notification,
+    installed_app_dir,
+    launch_uninstaller,
+    remaining_cooldown_seconds,
+    set_startup_enabled,
+)
+from .platform_usage import PlatformRateLimitError, fetch_platform_balance, fetch_platform_usage
 from .storage import AppConfig, load_config, load_usage_csv, save_config, save_usage_csv
 from .usage import UsageMetric, UsageSummary, aggregate_usage, parse_usage_csv, sample_usage
+
+API_DOCS_URL = "https://api-docs.deepseek.com/zh-cn/api/get-user-balance"
+PLATFORM_USAGE_URL = "https://platform.deepseek.com/usage"
 
 
 class MetricCard(QFrame):
@@ -175,6 +191,16 @@ class SettingsDialog(QDialog):
         self.platform_token_input = QLineEdit(config.platform_token)
         self.platform_token_input.setEchoMode(QLineEdit.Password)
         self.platform_token_input.setPlaceholderText("platform userToken")
+        self.notifications_input = QCheckBox("启用 Windows 通知")
+        self.notifications_input.setChecked(config.notifications_enabled)
+        self.auto_refresh_input = QCheckBox("启动后自动刷新，并按间隔更新")
+        self.auto_refresh_input.setChecked(config.auto_refresh_enabled)
+        self.startup_input = QCheckBox("开机启动并最小化到托盘")
+        self.startup_input.setChecked(config.startup_enabled)
+        self.interval_input = QSpinBox()
+        self.interval_input.setRange(5, 1440)
+        self.interval_input.setSuffix(" 分钟")
+        self.interval_input.setValue(config.refresh_interval_minutes)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -187,17 +213,34 @@ class SettingsDialog(QDialog):
         platform_label.setObjectName("smallText")
         endpoint = QLabel(f"余额查询：{BALANCE_URL}")
         endpoint.setObjectName("smallText")
-        platform_hint = QLabel("登录 platform.deepseek.com 后，从浏览器本地登录态复制 userToken；用于刷新平台用量。")
+        api_docs = QLabel(f'<a href="{API_DOCS_URL}">DeepSeek 官方余额 API 文档</a>')
+        api_docs.setObjectName("linkText")
+        api_docs.setOpenExternalLinks(True)
+        api_docs.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        platform_hint = QLabel(
+            "userToken 获取方法：\n"
+            "1. 点击下方平台用量页并登录 DeepSeek。\n"
+            "2. 按 F12 打开开发者工具，进入 Application / 应用程序。\n"
+            "3. 打开 Local storage -> https://platform.deepseek.com。\n"
+            "4. 复制 key 为 userToken 的 value，粘贴到上方输入框。"
+        )
         platform_hint.setObjectName("smallText")
         platform_hint.setWordWrap(True)
+        platform_link = QLabel(f'<a href="{PLATFORM_USAGE_URL}">打开 DeepSeek Platform Usage 页面</a>')
+        platform_link.setObjectName("linkText")
+        platform_link.setOpenExternalLinks(True)
+        platform_link.setTextInteractionFlags(Qt.TextBrowserInteraction)
         hint = QLabel("API Key 将保存到 Windows 用户目录的本应用配置文件中。")
         hint.setObjectName("smallText")
         hint.setWordWrap(True)
         buttons = QHBoxLayout()
         save_btn = QPushButton("保存")
         cancel_btn = QPushButton("取消")
+        uninstall_btn = QPushButton("卸载程序")
         save_btn.clicked.connect(self.accept)
         cancel_btn.clicked.connect(self.reject)
+        uninstall_btn.clicked.connect(self.request_uninstall)
+        buttons.addWidget(uninstall_btn)
         buttons.addStretch()
         buttons.addWidget(cancel_btn)
         buttons.addWidget(save_btn)
@@ -206,9 +249,16 @@ class SettingsDialog(QDialog):
         layout.addWidget(label)
         layout.addWidget(self.api_key_input)
         layout.addWidget(endpoint)
+        layout.addWidget(api_docs)
         layout.addWidget(platform_label)
         layout.addWidget(self.platform_token_input)
+        layout.addWidget(platform_link)
         layout.addWidget(platform_hint)
+        layout.addWidget(self.notifications_input)
+        layout.addWidget(self.auto_refresh_input)
+        layout.addWidget(self.startup_input)
+        layout.addWidget(QLabel("自动刷新间隔"))
+        layout.addWidget(self.interval_input)
         layout.addWidget(hint)
         layout.addLayout(buttons)
         self.setStyleSheet(
@@ -227,6 +277,19 @@ class SettingsDialog(QDialog):
                 color: #aeb8b3;
                 font-size: 12px;
             }
+            QLabel#linkText {
+                color: #7ac7ff;
+                font-size: 12px;
+            }
+            QLabel#linkText a {
+                color: #7ac7ff;
+                text-decoration: underline;
+            }
+            QCheckBox {
+                color: #f4f1e8;
+                font-size: 13px;
+                spacing: 8px;
+            }
             QLineEdit {
                 background: #0b100e;
                 color: #f4f1e8;
@@ -234,6 +297,13 @@ class SettingsDialog(QDialog):
                 border-radius: 8px;
                 padding: 10px;
                 selection-background-color: #796cff;
+            }
+            QSpinBox {
+                background: #0b100e;
+                color: #f4f1e8;
+                border: 1px solid #3a4642;
+                border-radius: 8px;
+                padding: 8px;
             }
             QPushButton {
                 background: rgba(255, 255, 255, 26);
@@ -257,6 +327,36 @@ class SettingsDialog(QDialog):
     def platform_token(self) -> str:
         return self.platform_token_input.text().strip()
 
+    @property
+    def notifications_enabled(self) -> bool:
+        return self.notifications_input.isChecked()
+
+    @property
+    def auto_refresh_enabled(self) -> bool:
+        return self.auto_refresh_input.isChecked()
+
+    @property
+    def startup_enabled(self) -> bool:
+        return self.startup_input.isChecked()
+
+    @property
+    def refresh_interval_minutes(self) -> int:
+        return self.interval_input.value()
+
+    def request_uninstall(self) -> None:
+        reply = QMessageBox.question(
+            self,
+            "卸载程序",
+            f"将启动安装版卸载器，并删除配置目录：\n{config_dir()}",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        if not launch_uninstaller(installed_app_dir()):
+            QMessageBox.information(self, "无法卸载", "当前不是安装版，未找到 unins000.exe。")
+            return
+        QApplication.instance().quit()
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -264,6 +364,11 @@ class MainWindow(QMainWindow):
         self.config = load_config()
         self.balance = Balance(False, "CNY", 25.75)
         self.summary = self._load_summary()
+        self.tray = self._create_tray()
+        self.auto_refresh_timer = QTimer(self)
+        self.auto_refresh_timer.timeout.connect(self.auto_refresh)
+        self.platform_refresh_started_at = 0.0
+        self.platform_refresh_cooldown_seconds = 300
 
         self.setWindowTitle("DeepSeek Monitor")
         self.setWindowIcon(QIcon(str(resource_path("deepseek_monitor/assets/app.ico"))))
@@ -293,6 +398,7 @@ class MainWindow(QMainWindow):
 
         self._apply_style()
         self.refresh_view()
+        self._schedule_auto_refresh()
 
     def _build_header(self) -> QHBoxLayout:
         header = QHBoxLayout()
@@ -314,6 +420,30 @@ class MainWindow(QMainWindow):
         header.addWidget(import_btn)
         header.addWidget(settings_btn)
         return header
+
+    def _create_tray(self) -> QSystemTrayIcon:
+        tray = QSystemTrayIcon(QIcon(str(resource_path("deepseek_monitor/assets/app.ico"))), self)
+        menu = QMenu(self)
+        show_action = QAction("打开面板", self)
+        refresh_action = QAction("刷新余额和用量", self)
+        quit_action = QAction("退出", self)
+        show_action.triggered.connect(self.showNormal)
+        refresh_action.triggered.connect(self.auto_refresh)
+        quit_action.triggered.connect(QApplication.instance().quit)
+        menu.addAction(show_action)
+        menu.addAction(refresh_action)
+        menu.addSeparator()
+        menu.addAction(quit_action)
+        tray.setContextMenu(menu)
+        tray.show()
+        return tray
+
+    def _schedule_auto_refresh(self) -> None:
+        self.auto_refresh_timer.stop()
+        if not self.config.auto_refresh_enabled:
+            return
+        QTimer.singleShot(1500, self.auto_refresh)
+        self.auto_refresh_timer.start(self.config.refresh_interval_minutes * 60 * 1000)
 
     def _build_left_panel(self) -> QFrame:
         panel = QFrame()
@@ -448,19 +578,70 @@ class MainWindow(QMainWindow):
         self.refresh_view()
 
     def refresh_platform_usage(self) -> None:
+        if self._skip_platform_refresh_if_cooling_down(show_dialog=True):
+            return
         if not self.config.platform_token:
             self.status_label.setText("未设置 Platform userToken，无法刷新平台用量。")
             return
         now = datetime.now(timezone.utc)
         try:
+            self.platform_refresh_started_at = time.monotonic()
             self.balance = fetch_platform_balance(self.config.platform_token)
             self.summary = fetch_platform_usage(self.config.platform_token, now.year, now.month)
+        except PlatformRateLimitError as exc:
+            QMessageBox.information(self, "刷新太频繁", str(exc))
+            self.status_label.setText(str(exc))
+            return
         except Exception as exc:
             QMessageBox.warning(self, "刷新失败", f"无法获取 DeepSeek 平台用量：\n{exc}")
             self.status_label.setText("平台用量刷新失败，请检查 userToken 或网络。")
             return
         self.status_label.setText(f"平台余额和用量已刷新：UTC {now.year}-{now.month:02d}")
         self.refresh_view()
+
+    def auto_refresh(self) -> None:
+        if self._skip_platform_refresh_if_cooling_down(show_dialog=False):
+            return
+        if not self.config.platform_token:
+            self._notify("DeepSeek Monitor", "未设置 Platform userToken，无法自动刷新用量。")
+            return
+        now = datetime.now(timezone.utc)
+        try:
+            self.platform_refresh_started_at = time.monotonic()
+            self.balance = fetch_platform_balance(self.config.platform_token)
+            self.summary = fetch_platform_usage(self.config.platform_token, now.year, now.month)
+        except PlatformRateLimitError as exc:
+            self.status_label.setText(str(exc))
+            self._notify("DeepSeek Monitor 刷新太频繁", str(exc))
+            return
+        except Exception as exc:
+            self.status_label.setText("自动刷新失败。")
+            self._notify("DeepSeek Monitor 自动刷新失败", str(exc))
+            return
+        self.status_label.setText(f"自动刷新完成：UTC {now.year}-{now.month:02d}")
+        self.refresh_view()
+        title, body = format_refresh_notification(self.balance.total, self.summary)
+        self._notify(title, body)
+
+    def _skip_platform_refresh_if_cooling_down(self, show_dialog: bool) -> bool:
+        remaining = remaining_cooldown_seconds(
+            self.platform_refresh_started_at,
+            time.monotonic(),
+            self.platform_refresh_cooldown_seconds,
+        )
+        if remaining <= 0:
+            return False
+        message = f"平台接口刚刷新过，请等待约 {remaining} 秒后再试。"
+        self.status_label.setText(message)
+        if show_dialog:
+            QMessageBox.information(self, "刷新太频繁", message)
+        return True
+
+    def _notify(self, title: str, body: str) -> None:
+        if not self.config.notifications_enabled:
+            return
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.showMessage(title, body, QSystemTrayIcon.Information, 8000)
 
     def import_csv(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "导入 DeepSeek Usage CSV", str(Path.home()), "CSV Files (*.csv);;All Files (*.*)")
@@ -483,7 +664,13 @@ class MainWindow(QMainWindow):
             return
         self.config.api_key = dialog.api_key
         self.config.platform_token = dialog.platform_token
+        self.config.notifications_enabled = dialog.notifications_enabled
+        self.config.auto_refresh_enabled = dialog.auto_refresh_enabled
+        self.config.refresh_interval_minutes = dialog.refresh_interval_minutes
+        self.config.startup_enabled = dialog.startup_enabled
         save_config(self.config)
+        set_startup_enabled(self.config.startup_enabled)
+        self._schedule_auto_refresh()
         self.status_label.setText("设置已保存。")
 
     def _apply_style(self) -> None:
@@ -592,9 +779,11 @@ def resource_path(relative_path: str) -> Path:
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(QIcon(str(resource_path("deepseek_monitor/assets/app.ico"))))
     window = MainWindow()
-    window.show()
+    if "--minimized" not in sys.argv:
+        window.show()
     return app.exec()
 
 

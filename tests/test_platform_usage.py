@@ -4,6 +4,7 @@ from deepseek_monitor.platform_usage import (
     PLATFORM_USAGE_AMOUNT_URL,
     PLATFORM_USAGE_COST_URL,
     PLATFORM_USER_SUMMARY_URL,
+    PlatformRateLimitError,
     fetch_platform_balance,
     fetch_platform_usage,
     parse_platform_balance,
@@ -179,3 +180,24 @@ def test_fetch_platform_balance_rejects_platform_error_payload():
         assert "Missing Token" in str(exc)
     else:
         raise AssertionError("expected platform error payload to raise")
+
+
+def test_fetch_platform_balance_reports_rate_limit_cleanly():
+    class Response:
+        status_code = 429
+        headers = {"Retry-After": "120"}
+
+        def raise_for_status(self):
+            import requests
+
+            raise requests.HTTPError("429 Client Error", response=self)
+
+        def json(self):
+            return {}
+
+    try:
+        fetch_platform_balance("rate-limited", http_get=lambda *args, **kwargs: Response())
+    except PlatformRateLimitError as exc:
+        assert "120 秒" in str(exc)
+    else:
+        raise AssertionError("expected rate limit error")

@@ -76,6 +76,16 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 
 产物在 `dist/DeepSeekMonitor.exe`，用本地 `.venv` 打包，不依赖 Conda 在 PATH 里。
 
+## 安装、通知和卸载
+
+安装包使用 Inno Setup 6 构建。先打包 exe，再运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
+```
+
+安装时可以选择安装目录，也可以选择是否开机启动并最小化到托盘。程序默认启用 Windows 托盘通知；启动后会自动刷新一次余额和用量，之后按设置的间隔刷新。卸载时会删除安装器安装的程序文件，并清理 `%APPDATA%\DeepSeekMonitor` 配置目录。
+
 ## 用到的东西
 
 - **PySide6** —— Qt 的 Python 绑定，做界面用

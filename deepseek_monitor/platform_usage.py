@@ -20,6 +20,10 @@ TOKEN_USAGE_TYPES = (
 )
 
 
+class PlatformRateLimitError(RuntimeError):
+    pass
+
+
 def fetch_platform_balance(
     platform_token: str,
     timeout: float = 30.0,
@@ -30,7 +34,7 @@ def fetch_platform_balance(
         headers=_platform_headers(platform_token),
         timeout=timeout,
     )
-    response.raise_for_status()
+    _raise_for_status(response)
     return parse_platform_balance(_extract_biz_data(_checked_platform_payload(response.json())))
 
 
@@ -45,9 +49,9 @@ def fetch_platform_usage(
     params = {"year": year, "month": month}
 
     amount_response = http_get(PLATFORM_USAGE_AMOUNT_URL, headers=headers, params=params, timeout=timeout)
-    amount_response.raise_for_status()
+    _raise_for_status(amount_response)
     cost_response = http_get(PLATFORM_USAGE_COST_URL, headers=headers, params=params, timeout=timeout)
-    cost_response.raise_for_status()
+    _raise_for_status(cost_response)
 
     return parse_platform_usage(
         _extract_biz_data(_checked_platform_payload(amount_response.json())),
@@ -103,6 +107,29 @@ def _platform_headers(platform_token: str) -> Dict[str, str]:
         "Authorization": f"Bearer {platform_token.strip()}",
         "X-App-Version": PLATFORM_APP_VERSION,
     }
+
+
+def _raise_for_status(response: Any) -> None:
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code == 429:
+            retry_after = _retry_after_seconds(getattr(exc.response, "headers", {}) or {})
+            if retry_after:
+                raise PlatformRateLimitError(f"DeepSeek 平台接口限流，请等待 {retry_after} 秒后再刷新。") from exc
+            raise PlatformRateLimitError("DeepSeek 平台接口限流，请稍后再刷新。") from exc
+        raise
+
+
+def _retry_after_seconds(headers: Dict[str, str]) -> int:
+    value = headers.get("Retry-After") or headers.get("retry-after")
+    if not value:
+        return 0
+    try:
+        return max(0, int(float(value)))
+    except ValueError:
+        return 0
 
 
 def _checked_platform_payload(payload: Dict[str, Any]) -> Dict[str, Any]:

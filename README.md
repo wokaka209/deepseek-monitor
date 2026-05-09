@@ -76,6 +76,16 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 
 Output lands in `dist/DeepSeekMonitor.exe`. The build uses the local `.venv` so the packaged app does not depend on Conda being on `PATH`.
 
+## Installer, Notifications, and Uninstall
+
+The installer is built with Inno Setup 6. Build the exe first, then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
+```
+
+The installer lets users choose the install directory and optionally start the app with Windows. Notifications are enabled by default. On startup, the app refreshes balance and usage once, then refreshes on the configured interval. Uninstall removes installer-managed program files and cleans `%APPDATA%\DeepSeekMonitor`.
+
 ## Built with
 
 - **PySide6** — Qt for Python, the GUI framework
