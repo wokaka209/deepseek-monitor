@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-DeepSeek Monitor 是一个 Windows 桌面应用，用于监控 DeepSeek API 用量和账户余额。使用 PySide6 构建 GUI，支持导入 CSV 用量数据和实时查询余额。
+DeepSeek Monitor 是一个 Windows 桌面应用，用于通过 DeepSeek 官方余额接口查询账户余额。使用 PySide6 构建 GUI，不包含平台 userToken、Token 用量、CSV 用量导入或平台私有 API 调用。
 
 ## 常用命令
 
@@ -16,7 +16,7 @@ python main.py
 pytest
 
 # 运行单个测试
-pytest tests/test_usage.py::test_parse_usage_csv_accepts_common_deepseek_export_columns
+pytest tests/test_balance.py::test_fetch_balance_uses_deepseek_balance_endpoint_and_bearer_auth
 
 # 打包为 exe (Windows) — 需要先创建 .venv
 py -3.12 -m venv .venv
@@ -30,29 +30,30 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 main.py                     # 入口，调用 deepseek_monitor.app.main()
 deepseek_monitor/
-  app.py                    # PySide6 GUI：MainWindow、MetricCard、ModelRow、TokenChart
-  deepseek_api.py           # DeepSeek API 余额查询 (fetch_balance, parse_balance_response)
-  storage.py                # 配置存储 (%APPDATA%/DeepSeekMonitor/)，CSV 读写
-  usage.py                  # 用量数据模型：UsageRow、UsageMetric、UsageSummary，CSV 解析
+  app.py                    # PySide6 GUI：MainWindow、SettingsDialog、余额卡片
+  deepseek_api.py           # DeepSeek 官方余额查询 (fetch_balance, parse_balance_response)
+  desktop_integration.py    # 开机启动、通知文案、卸载辅助
+  storage.py                # 配置存储 (%APPDATA%/DeepSeekMonitor/)
   assets/
     app.ico                 # 应用图标（exe 和窗口标题栏）
     app.png                 # 应用图标 PNG 版本
 tests/
   test_balance.py           # 余额 API 响应解析测试
-  test_usage.py             # CSV 解析和聚合逻辑测试
+  test_desktop_integration.py
+  test_storage.py
 ```
 
 ## 数据流
 
-1. **余额查询**：`app.py` → `deepseek_api.fetch_balance()` → DeepSeek API → `Balance` dataclass
-2. **CSV 导入**：用户选择文件 → `usage.parse_usage_csv()` → `usage.aggregate_usage()` → `UsageSummary` → `storage.save_usage_csv()`
-3. **配置持久化**：API Key 保存到 `%APPDATA%/DeepSeekMonitor/config.json`
+1. **余额查询**：`app.py` → `deepseek_api.fetch_balance()` → DeepSeek 官方余额 API → `Balance` dataclass
+2. **配置持久化**：API Key 和桌面设置保存到 `%APPDATA%/DeepSeekMonitor/config.json`
 
 ## 关键设计决策
 
-- CSV 解析器使用 `_pick()` 函数支持多种列名格式（如 `date`/`day`/`time`/`created_at`），兼容 DeepSeek 不同版本的导出格式
-- 无 API Key 时显示示例余额（¥25.75）和示例用量数据
-- 所有金额使用 CNY 货币单位
+- 只使用官方余额接口：`https://api.deepseek.com/user/balance`
+- 无 API Key 时余额显示 `¥0.00`
+- 余额刷新在后台 `QThread` 中执行，避免网络请求阻塞 GUI
+- 所有金额使用 CNY 展示
 - GUI 样式内嵌在 `app.py` 的 `_apply_style()` 中，深色主题，圆角卡片设计
 
 ## 依赖

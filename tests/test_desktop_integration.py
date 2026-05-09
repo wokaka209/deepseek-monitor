@@ -7,7 +7,6 @@ from deepseek_monitor.desktop_integration import (
     remaining_cooldown_seconds,
 )
 from deepseek_monitor.storage import AppConfig
-from deepseek_monitor.usage import UsageSummary
 
 
 def test_app_config_defaults_enable_notifications_and_auto_refresh():
@@ -36,16 +35,11 @@ def test_find_uninstaller_only_returns_installer_generated_file(tmp_path):
     assert find_uninstaller(app_dir) == uninstaller
 
 
-def test_format_refresh_notification_includes_balance_and_usage():
-    summary = UsageSummary(total_tokens=79711, total_cost=0.1, total_requests=17)
-
-    title, body = format_refresh_notification(105.725939, summary)
+def test_format_refresh_notification_includes_balance():
+    title, body = format_refresh_notification(105.725939)
 
     assert title == "DeepSeek Monitor 已更新"
-    assert "余额：¥105.73" in body
-    assert "Tokens：79,711" in body
-    assert "请求：17 次" in body
-    assert "消费：¥0.10" in body
+    assert body == "余额：¥105.73"
 
 
 def test_remaining_cooldown_seconds_rounds_up():

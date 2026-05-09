@@ -6,23 +6,7 @@
 ![PySide6](https://img.shields.io/badge/PySide6-6.x-4FC08D?style=flat-square&logo=qt&logoColor=fff)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-一个 Windows 桌面小工具，盯着你的 DeepSeek API 花费。余额、用量趋势、各模型占比，全塞在一个深色面板里。
-
-## 目录
-
-- [这是什么](#这是什么)
-- [跑起来](#跑起来)
-- [怎么用](#怎么用)
-- [文件结构](#文件结构)
-- [打包成 exe](#打包成-exe)
-- [用到的东西](#用到的东西)
-- [许可协议](#许可协议)
-
-## 这是什么
-
-DeepSeek Monitor 调 DeepSeek 的接口查余额。你也可以导入从 DeepSeek 平台导出的用量 CSV，或配置 Platform userToken 读取平台登录态下的用量数据。它会解析 token 数、费用、请求次数，然后按天、按模型画出来。
-
-未配置凭据时，面板显示 0，不再显示示例数据。
+一个 Windows 桌面小工具，只通过 DeepSeek 官方余额接口查询账户余额。
 
 ## 跑起来
 
@@ -37,33 +21,29 @@ python main.py
 conda run -n py11-tools python main.py
 ```
 
-窗口打开后，点 **设置** 填 API Key，再点 **刷新余额** 拉真实数据。
+打开 **设置**，填写 DeepSeek API Key，再点 **刷新余额**。
 
 ## 怎么用
 
-三种模式：
-
-1. **未配置凭据** —— 所有用量数值显示 0。
-2. **填了 API Key** —— 点"刷新余额"调 DeepSeek 接口，真实数字替换占位符。
-3. **Platform userToken 或 CSV** —— 使用保存的 userToken 刷新平台用量，或点"导入 Usage CSV"选择从 DeepSeek 下载的文件。
-
-API Key 存在 `%APPDATA%/DeepSeekMonitor/config.json`，CSV 数据存在 `%APPDATA%/DeepSeekMonitor/usage.csv`。
+- 使用官方余额接口：`https://api.deepseek.com/user/balance`
+- API Key 保存在 `%APPDATA%/DeepSeekMonitor/config.json`
+- 未配置 API Key 时余额显示 `¥0.00`
+- 保留 Windows 通知、自动刷新余额、开机启动和安装版卸载功能
 
 ## 文件结构
 
 ```
 main.py                      # 入口
 deepseek_monitor/
-  app.py                     # 所有 GUI 东西 —— 窗口、卡片、图表
-  deepseek_api.py            # 调 DeepSeek 查余额
-  storage.py                 # 读写配置和 CSV，存在 %APPDATA%
-  usage.py                   # 解析 CSV，按天、按模型聚合
+  app.py                     # PySide6 界面
+  deepseek_api.py            # DeepSeek 官方余额 API
+  desktop_integration.py     # 开机启动、通知文案、卸载辅助
+  storage.py                 # %APPDATA% 下的配置读写
 tests/
   test_balance.py            # 余额响应解析测试
-  test_usage.py              # CSV 解析和聚合测试
+  test_desktop_integration.py
+  test_storage.py
 ```
-
-CSV 解析器兼容多种列名格式（`date`/`day`/`time`/`created_at` 等），DeepSeek 不同版本导出的文件都能认。
 
 ## 打包成 exe
 
@@ -74,9 +54,9 @@ py -3.12 -m venv .venv
 powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-产物在 `dist/DeepSeekMonitor.exe`，用本地 `.venv` 打包，不依赖 Conda 在 PATH 里。
+产物在 `dist/DeepSeekMonitor.exe`。
 
-## 安装、通知和卸载
+## 安装包
 
 安装包使用 Inno Setup 6 构建。先打包 exe，再运行：
 
@@ -84,13 +64,7 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
 ```
 
-安装时可以选择安装目录，也可以选择是否开机启动并最小化到托盘。程序默认启用 Windows 托盘通知；启动后会自动刷新一次余额和用量，之后按设置的间隔刷新。卸载时会删除安装器安装的程序文件，并清理 `%APPDATA%\DeepSeekMonitor` 配置目录。
-
-## 用到的东西
-
-- **PySide6** —— Qt 的 Python 绑定，做界面用
-- **requests** —— HTTP 库，调 DeepSeek 接口
-- **PyInstaller** —— 打包成 exe
+安装时可以选择安装目录，也可以选择是否开机启动。卸载时会删除安装器安装的程序文件，并清理 `%APPDATA%\DeepSeekMonitor`。
 
 ## 许可协议
 

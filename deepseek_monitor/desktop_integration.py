@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from .storage import APP_DIR
-from .usage import UsageSummary
 
 
 APP_NAME = "DeepSeek Monitor"
@@ -24,17 +23,10 @@ def find_uninstaller(app_dir: Path) -> Optional[Path]:
     return None
 
 
-def format_refresh_notification(balance_total: float, summary: UsageSummary) -> Tuple[str, str]:
+def format_refresh_notification(balance_total: float) -> Tuple[str, str]:
     return (
         "DeepSeek Monitor 已更新",
-        "\n".join(
-            [
-                f"余额：¥{balance_total:.2f}",
-                f"Tokens：{summary.total_tokens:,}",
-                f"请求：{summary.total_requests:,} 次",
-                f"消费：¥{summary.total_cost:.2f}",
-            ]
-        ),
+        f"余额：¥{balance_total:.2f}",
     )
 
 
