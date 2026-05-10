@@ -6,7 +6,23 @@
 ![PySide6](https://img.shields.io/badge/PySide6-6.x-4FC08D?style=flat-square&logo=qt&logoColor=fff)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-A Windows desktop app for checking your DeepSeek account balance through the official balance API.
+查 DeepSeek 账户余额的小工具。Windows 桌面应用，深色主题，双击就跑。
+
+## Table of Contents
+
+- [What is this](#what-is-this)
+- [Getting started](#getting-started)
+- [How it works](#how-it-works)
+- [File structure](#file-structure)
+- [Build](#build)
+- [Built with](#built-with)
+- [License](#license)
+
+## What is this
+
+一个 Windows 桌面应用，调 DeepSeek 官方余额接口查账户余额。就这一个功能，没别的。
+
+支持：Windows 通知提醒余额变动、开机自启、Inno Setup 安装包。
 
 ## Getting started
 
@@ -15,37 +31,43 @@ pip install PySide6 requests
 python main.py
 ```
 
-Or with Conda:
+用 Conda：
 
 ```bash
 conda run -n py11-tools python main.py
 ```
 
-Open **设置**, enter your DeepSeek API Key, then click **刷新余额**.
+打开后点 **设置** 填 API Key，再点 **刷新余额**。
 
 ## How it works
 
-- Uses the official balance endpoint: `https://api.deepseek.com/user/balance`
-- Stores the API Key in `%APPDATA%/DeepSeekMonitor/config.json`
-- Shows `¥0.00` when no API Key is configured
-- Supports optional Windows notifications, auto refresh, startup launch, and installer uninstall
+调 `https://api.deepseek.com/user/balance`，Bearer Token 认证，返回余额显示在卡片上。
+
+- API Key 存在 `%APPDATA%/DeepSeekMonitor/config.json`
+- 没填 Key 时余额显示 `¥0.00`
+- 刷新在后台线程跑，不卡界面
 
 ## File structure
 
 ```
-main.py                      # Entry point
+main.py                      # 入口
 deepseek_monitor/
-  app.py                     # PySide6 GUI
-  deepseek_api.py            # Official DeepSeek balance API
-  desktop_integration.py     # Startup, notification text, uninstall helpers
-  storage.py                 # Config under %APPDATA%
+  app.py                     # PySide6 界面，所有 GUI 都在这
+  deepseek_api.py            # 余额 API 调用和响应解析
+  desktop_integration.py     # 开机启动、通知、卸载
+  storage.py                 # 配置读写
+  assets/
+    app.ico                  # 应用图标
+    app.png
 tests/
-  test_balance.py            # Balance response parsing
+  test_balance.py            # 余额响应解析
   test_desktop_integration.py
   test_storage.py
 ```
 
-## Building the exe
+## Build
+
+打包 exe：
 
 ```powershell
 py -3.12 -m venv .venv
@@ -54,17 +76,20 @@ py -3.12 -m venv .venv
 powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-Output lands in `dist/DeepSeekMonitor.exe`.
-
-## Installer
-
-The installer is built with Inno Setup 6. Build the exe first, then run:
+打包安装包（需要先完成上面的 exe 打包）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
 ```
 
-The installer lets users choose the install directory and optionally start the app with Windows. Uninstall removes installer-managed program files and cleans `%APPDATA%\DeepSeekMonitor`.
+安装时可选安装目录和是否开机启动。卸载会清理 `%APPDATA%\DeepSeekMonitor`。
+
+## Built with
+
+- **PySide6** — Qt for Python，做界面
+- **requests** — 调 DeepSeek 接口
+- **PyInstaller** — 打包 exe
+- **Inno Setup 6** — 打包安装包
 
 ## License
 
